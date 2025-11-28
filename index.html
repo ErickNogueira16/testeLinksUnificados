@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Raizz Capital - TV Unificada</title>
+  <script type="module" src="https://us-east-1.online.tableau.com/javascripts/api/tableau.embedding.3.latest.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; }
+    #vizContainer { width: 100%; height: 100%; }
+  </style>
+  <link rel="icon" href="https://raizzcapital.com.br/wp-content/uploads/2024/02/logo-raizz-capital-fundo-branco.webp">
+</head>
+<body>
+  <div id="vizContainer"></div>
+
+  <script>
+    /* ╔══════════════════════════════════════════════╗
+       ║  CONFIGURAÇÃO DOS 3 SISTEMAS (EDITAR AQUI)  ║
+       ╚══════════════════════════════════════════════╝ */
+    const sistemas = [
+      {
+        nome: "COMERCIAL",
+        backendURL: "https://tableau-backend-h83x.onrender.com/get_tableau_url?painel=comercial",
+        dashboards: [
+          { nome: "COMERCIAL | ITAJAÍ", view: "COMERCIALITAJA" },
+          { nome: "COMERCIAL | VIANA", view: "COMERCIALVIANA" }
+        ]
+      },
+      {
+        nome: "CAPTAÇÃO",
+        backendURL: "https://tableau-backend-h83x.onrender.com/get_tableau_url?painel=captacao",
+        dashboards: [
+          { nome: "CAPTAÇÃO | A", view: "CAPTACAO_A" },
+          { nome: "CAPTAÇÃO | B", view: "CAPTACAO_B" }
+        ]
+      },
+      {
+        nome: "NOVOS NEGÓCIOS",
+        backendURL: "https://tableau-backend-h83x.onrender.com/get_tableau_url?painel=novosnegocios",
+        dashboards: [
+          { nome: "NOVOS NEGÓCIOS | X", view: "NN_X" },
+          { nome: "NOVOS NEGÓCIOS | Y", view: "NN_Y" }
+        ]
+      }
+    ];
+
+    /* Tempo em minutos para trocar de sistema */
+    const TEMPO_SISTEMA = 5 * 60 * 1000;
+    const TEMPO_INTERNO = 60 * 1000;
+
+    let indexSistema = 0;
+    let indexDashboard = 0;
+    let vizElement = null;
+
+    async function fetchToken(url) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("Erro no backend: " + resp.status);
+      return resp.json();
+    }
+
+    function buildEmbedUrl(embed_url, viewSlug) {
+      const parts = embed_url.split("/views/");
+      const prefix = parts[0] + "/views/";
+      const after = parts[1] || "";
+      const workbookSegment = after.split("/")[0];
+      const params = embed_url.includes("?:") ? embed_url.substring(embed_url.indexOf("?:")) : "";
+      return `${prefix}${workbookSegment}/${viewSlug}${params}`;
+    }
+
+    async function criarViz(viewSlug, jwt, embed_url) {
+      const container = document.getElementById("vizContainer");
+      container.innerHTML = "";
+      const urlEmbed = buildEmbedUrl(embed_url, viewSlug);
+
+      vizElement = document.createElement("tableau-viz");
+      vizElement.src = urlEmbed;
+      vizElement.token = jwt;
+      vizElement.toolbar = "hidden";
+      vizElement.hideTabs = true;
+      container.appendChild(vizElement);
+    }
+
+    async function carregarSistema() {
+      const sistema = sistemas[indexSistema];
+      console.log("Carregando sistema:", sistema.nome);
+
+      const { embed_url, jwt } = await fetchToken(sistema.backendURL);
+      indexDashboard = 0;
+
+      await criarViz(sistema.dashboards[indexDashboard].view, jwt, embed_url);
+
+      // Rotacionar dashboards internos
+      setInterval(async () => {
+        indexDashboard = (indexDashboard + 1) % sistema.dashboards.length;
+        const tokenData = await fetchToken(sistema.backendURL);
+        await criarViz(sistema.dashboards[indexDashboard].view, tokenData.jwt, tokenData.embed_url);
+      }, TEMPO_INTERNO);
+    }
+
+    async function init() {
+      await carregarSistema();
+
+      // Troca COMPLETA de sistema a cada 5 minutos
+      setInterval(async () => {
+        indexSistema = (indexSistema + 1) % sistemas.length;
+        await carregarSistema();
+      }, TEMPO_SISTEMA);
+    }
+
+    init();
+  </script>
+</body>
+</html>
